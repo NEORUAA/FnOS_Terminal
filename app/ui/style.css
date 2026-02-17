@@ -11,6 +11,8 @@ body {
   margin: 0;
   height: 100%;
   background: #0b0f14;
+  background-image: url("https://images.unsplash.com/photo-1770064319334-2c61b12dd2cc?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D");
+  background-size: cover;
   color: #d7dde5;
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
 }
@@ -140,7 +142,7 @@ button#logoutBtn:hover {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 8px;
   font-size: 12px;
   background: linear-gradient(to top, #0b0f14, transparent);
   color: #FFFFFF;
@@ -149,6 +151,18 @@ button#logoutBtn:hover {
   position: fixed;
   align-items: center;
   bottom: 0;
+  z-index: 999 !important;
+}
+
+.blur-effect {
+  z-index: 998 !important;
+  height: 54px;
+  width: 100vw;
+  position: fixed !important;
+  pointer-events: none;
+  transform: rotate(180deg);
+  bottom: 0 !important;
+  top: unset !important;
 }
 
 .tip {

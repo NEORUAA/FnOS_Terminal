@@ -36,6 +36,17 @@
     <section id="terminalContainer" class="terminal-container" tabindex="0" aria-label="Terminal">
       <pre id="terminal" class="terminal"></pre>
     </section>
+    <div style="position:absolute;z-index:10;pointer-events:auto;top:0;left:0;right:0;bottom:auto" class="blur-effect">
+      <div
+        style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:1;backdrop-filter:blur(1.6px);-webkit-backdrop-filter:blur(1.6px);mask-image:linear-gradient(to top, transparent 0%, black 25%);-webkit-mask-image:linear-gradient(to top, transparent 0%, black 25%)">
+      </div>
+      <div
+        style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:2;backdrop-filter:blur(4.800000000000001px);-webkit-backdrop-filter:blur(4.800000000000001px);mask-image:linear-gradient(to top, transparent 25%, black 75%);-webkit-mask-image:linear-gradient(to top, transparent 25%, black 75%)">
+      </div>
+      <div
+        style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:3;backdrop-filter:blur(9.600000000000001px);-webkit-backdrop-filter:blur(9.600000000000001px);mask-image:linear-gradient(to top, transparent 75%, black 100%);-webkit-mask-image:linear-gradient(to top, transparent 75%, black 100%)">
+      </div>
+    </div>
     <footer class="statusbar">
       <span id="statusText">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
