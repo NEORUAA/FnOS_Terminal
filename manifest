@@ -1,11 +1,11 @@
 appname               = FnOS_Terminal
-version               = 1.0.0
-display_name          = FnOS Terminal
+version               = 1.0.3
+display_name          = 终端
 desc                  = Root bash terminal for fnOS
 arch                  = x86_64
 source                = thirdparty
-maintainer            = your-name
-distributor           = your-name
+maintainer            = FnOS_Terminal
+distributor           = FnOS_Terminal
 desktop_uidir         = ui
 desktop_applaunchname = FnOS_Terminal.Application
 service_port          = 38473

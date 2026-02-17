@@ -1,7 +1,7 @@
 {
     ".url": {
         "FnOS_Terminal.Application": {
-            "title": "FnOS Terminal",
+            "title": "终端",
             "icon": "images/icon_{0}.png",
             "type": "iframe",
             "protocol": "http",
