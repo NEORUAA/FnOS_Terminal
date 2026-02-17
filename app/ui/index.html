@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 
-<body>
+<body style="background: rgba(0,0,0,0.7);">
   <div id="authScreen" class="auth-screen">
     <div class="auth-card">
       <h1>FnOS Terminal 登录</h1>
@@ -36,6 +36,20 @@
     <section id="terminalContainer" class="terminal-container" tabindex="0" aria-label="Terminal">
       <pre id="terminal" class="terminal"></pre>
     </section>
+    <div id="settingsOverlay" class="hidden"
+      style="position:fixed;inset:0;z-index:1200;display:flex;justify-content:center;align-items:flex-end;padding:28px 14px;">
+      <div id="settingsCard" class="auth-card" style="border-radius: 50px;">
+        <div style="position:relative;display:flex;align-items:center;justify-content: space-between;margin: -10px;margin-bottom:14px;">
+          <button style="opacity: 0;"></button>
+          <div style="font-size:20px;font-weight:600;color:white;">设置</div>
+          <button id="settingsCloseBtn" type="button" title="关闭" >✕</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <label for="disableDimToggle" style="font-size:14px;color:white;">关闭背景压暗</label>
+          <input id="disableDimToggle" type="checkbox" />
+        </div>
+      </div>
+    </div>
     <!-- <div style="position:absolute;z-index:10;pointer-events:auto;top:0;left:0;right:0;bottom:auto" class="blur-effect">
       <div
         style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:1;backdrop-filter:blur(1.6px);-webkit-backdrop-filter:blur(1.6px);mask-image:linear-gradient(to top, transparent 0%, black 25%);-webkit-mask-image:linear-gradient(to top, transparent 0%, black 25%)">

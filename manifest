@@ -1,5 +1,5 @@
 appname               = FnOS_Terminal
-version               = 1.0.3
+version               = 1.0.6
 display_name          = 终端
 desc                  = Root bash terminal for fnOS
 arch                  = x86_64

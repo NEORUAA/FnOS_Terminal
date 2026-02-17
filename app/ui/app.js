@@ -16,10 +16,17 @@ const ctrlCBtn = document.getElementById("ctrlCBtn");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const pasteBtn = document.getElementById("pasteBtn");
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const settingsCard = document.getElementById("settingsCard");
+const settingsCloseBtn = document.getElementById("settingsCloseBtn");
+const disableDimToggle = document.getElementById("disableDimToggle");
 
 const READ_TIMEOUT_SEC = 20;
 const MIN_PASSWORD_LEN = 8;
 const MAX_SCREEN_ROWS = 2500;
+const BODY_DIM_BACKGROUND = "rgba(0,0,0,0.7)";
+const DIM_DISABLED_STORAGE_KEY = "fnos_terminal_disable_dim";
 
 let sid = "";
 let running = false;
@@ -34,6 +41,7 @@ let cursorRow = 0;
 let cursorCol = 0;
 let renderScheduled = false;
 let terminalCols = 120;
+let windowAnimationApi = null;
 
 function on(el, eventName, handler) {
   if (el) {
@@ -44,6 +52,147 @@ function on(el, eventName, handler) {
 function focusEl(el) {
   if (el && typeof el.focus === "function") {
     el.focus();
+  }
+}
+
+function isDimDisabled() {
+  try {
+    return localStorage.getItem(DIM_DISABLED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistDimDisabled(disabled) {
+  try {
+    localStorage.setItem(DIM_DISABLED_STORAGE_KEY, disabled ? "1" : "0");
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function applyDimState(disabled) {
+  if (!document.body) return;
+  document.body.style.background = disabled ? "" : BODY_DIM_BACKGROUND;
+  if (disableDimToggle) {
+    disableDimToggle.checked = !!disabled;
+  }
+}
+
+function setupAppWindowAnimations() {
+  if (window._fnosWindowAnimationInitialized && window.__fnosWindowAnimationApi) {
+    return window.__fnosWindowAnimationApi;
+  }
+
+  window._fnosWindowAnimationInitialized = true;
+
+  const WINDOW_ENTER_CLASS = "fnos-window--enter";
+  const WINDOW_EXIT_CLASS = "fnos-window--exit";
+  const WINDOW_EXIT_CLOSE_CLASS = "fnos-window--exit-close";
+  const ENTER_DURATION_MS = 300;
+  const EXIT_DURATION_MS = 600;
+  const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  function shouldReduceMotion() {
+    return !!reduceMotionQuery && reduceMotionQuery.matches;
+  }
+
+  function parseAnimationDurationMs(durationValue, fallbackMs) {
+    if (typeof durationValue !== "string" || !durationValue.trim()) return fallbackMs;
+    const parts = durationValue.split(",").map((item) => item.trim()).filter(Boolean);
+    if (!parts.length) return fallbackMs;
+
+    let maxMs = 0;
+    parts.forEach((item) => {
+      if (item.endsWith("ms")) {
+        const value = Number.parseFloat(item.slice(0, -2));
+        if (Number.isFinite(value)) maxMs = Math.max(maxMs, value);
+      } else if (item.endsWith("s")) {
+        const value = Number.parseFloat(item.slice(0, -1));
+        if (Number.isFinite(value)) maxMs = Math.max(maxMs, value * 1000);
+      }
+    });
+
+    return maxMs > 0 ? maxMs : fallbackMs;
+  }
+
+  function getCurrentAnimationDurationMs(el, fallbackMs) {
+    if (!(el instanceof HTMLElement)) return fallbackMs;
+    const computedStyle = window.getComputedStyle(el);
+    return parseAnimationDurationMs(computedStyle.animationDuration, fallbackMs);
+  }
+
+  function resetClasses(el) {
+    if (!(el instanceof HTMLElement)) return;
+    el.classList.remove(WINDOW_ENTER_CLASS, WINDOW_EXIT_CLASS, WINDOW_EXIT_CLOSE_CLASS);
+  }
+
+  function animateIn(el) {
+    if (!(el instanceof HTMLElement)) return;
+    resetClasses(el);
+    el.removeAttribute("data-fnos-window-animating-out");
+    if (shouldReduceMotion()) return;
+
+    el.classList.add(WINDOW_ENTER_CLASS);
+    const durationMs = getCurrentAnimationDurationMs(el, ENTER_DURATION_MS);
+    window.setTimeout(() => {
+      el.classList.remove(WINDOW_ENTER_CLASS);
+    }, durationMs);
+  }
+
+  function animateOut(el, onDone) {
+    if (!(el instanceof HTMLElement)) {
+      if (typeof onDone === "function") onDone();
+      return;
+    }
+    if (el.dataset.fnosWindowAnimatingOut === "1") return;
+
+    if (shouldReduceMotion()) {
+      resetClasses(el);
+      if (typeof onDone === "function") onDone();
+      return;
+    }
+
+    el.dataset.fnosWindowAnimatingOut = "1";
+    el.classList.remove(WINDOW_ENTER_CLASS);
+    el.classList.add(WINDOW_EXIT_CLASS, WINDOW_EXIT_CLOSE_CLASS);
+    const durationMs = getCurrentAnimationDurationMs(el, EXIT_DURATION_MS);
+    window.setTimeout(() => {
+      resetClasses(el);
+      el.removeAttribute("data-fnos-window-animating-out");
+      if (typeof onDone === "function") onDone();
+    }, durationMs);
+  }
+
+  window.__fnosWindowAnimationApi = { animateIn, animateOut, resetClasses };
+  return window.__fnosWindowAnimationApi;
+}
+
+function openSettings() {
+  if (settingsOverlay) settingsOverlay.classList.remove("hidden");
+  if (windowAnimationApi && settingsCard) {
+    windowAnimationApi.animateIn(settingsCard);
+  }
+  focusEl(settingsCloseBtn);
+}
+
+function closeSettings() {
+  if (windowAnimationApi && settingsCard && settingsOverlay && !settingsOverlay.classList.contains("hidden")) {
+    windowAnimationApi.animateOut(settingsCard, () => {
+      if (settingsOverlay) settingsOverlay.classList.add("hidden");
+      focusEl(terminalContainer);
+    });
+    return;
+  }
+  if (settingsOverlay) settingsOverlay.classList.add("hidden");
+  focusEl(terminalContainer);
+}
+
+function hideSettingsImmediately() {
+  if (settingsOverlay) settingsOverlay.classList.add("hidden");
+  if (windowAnimationApi && settingsCard) {
+    windowAnimationApi.resetClasses(settingsCard);
+    settingsCard.removeAttribute("data-fnos-window-animating-out");
   }
 }
 
@@ -60,6 +209,7 @@ function setAuthError(text) {
 }
 
 function showAuth(mode, hintText = "") {
+  hideSettingsImmediately();
   if (authScreenEl) authScreenEl.classList.remove("hidden");
   if (terminalAppEl) terminalAppEl.classList.add("hidden");
   if (setupFormEl) setupFormEl.classList.toggle("hidden", mode !== "setup");
@@ -78,6 +228,7 @@ function showAuth(mode, hintText = "") {
 }
 
 function showTerminal() {
+  hideSettingsImmediately();
   if (authScreenEl) authScreenEl.classList.add("hidden");
   if (terminalAppEl) terminalAppEl.classList.remove("hidden");
   focusEl(terminalContainer);
@@ -1041,6 +1192,26 @@ on(logoutBtn, "click", async () => {
   showAuth("login", "已退出登录。请输入访问密码继续。");
 });
 
+on(settingsBtn, "click", () => {
+  openSettings();
+});
+
+on(settingsCloseBtn, "click", () => {
+  closeSettings();
+});
+
+on(settingsOverlay, "click", (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettings();
+  }
+});
+
+on(disableDimToggle, "change", () => {
+  const disabled = !!disableDimToggle?.checked;
+  persistDimDisabled(disabled);
+  applyDimState(disabled);
+});
+
 on(terminalContainer, "click", () => focusEl(terminalContainer));
 on(terminalContainer, "keydown", (event) => {
   const data = keyToInput(event);
@@ -1087,6 +1258,9 @@ on(reconnectBtn, "click", () => {
   resetTerminalBuffer();
   connectTerminal(false);
 });
+
+applyDimState(isDimDisabled());
+windowAnimationApi = setupAppWindowAnimations();
 
 loadAuthState().catch((error) => {
   showAuth("login", "无法获取鉴权状态，请稍后重试。");

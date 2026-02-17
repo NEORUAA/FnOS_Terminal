@@ -96,6 +96,7 @@ button#logoutBtn:hover {
   padding: 16px 16px 48px;
   outline: none;
   height: 100vh;
+  scrollbar-color: rgba(255, 255, 255, .1) transparent;
 }
 
 .terminal-container:focus {
@@ -192,6 +193,42 @@ button#logoutBtn:hover {
   transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44), box-shadow 0.25s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s ease-in-out, filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
   background: rgba(255, 255, 255, 0.10);
   corner-shape: superellipse(2);
+}
+
+.fnos-window--enter {
+  animation: fnos-window-enter 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+.fnos-window--exit.fnos-window--exit-close {
+  animation: fnos-window-exit-close 0.3s cubic-bezier(0.3, 0.2, 0.2, 1) both;
+}
+
+@keyframes fnos-window-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+    filter: blur(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes fnos-window-exit-close {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+    filter: blur(10px);
+  }
 }
 
 .auth-card h1 {
