@@ -871,7 +871,7 @@ async function createSession() {
     body: JSON.stringify({ cols, rows }),
   });
   sid = payload.sid;
-  setStatus(`已连接会话: ${sid.slice(0, 8)}`);
+  setStatus(`${sid.slice(0, 8)}(root)`);
 }
 
 async function closeSession() {

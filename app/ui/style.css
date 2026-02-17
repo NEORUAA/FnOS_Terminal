@@ -42,25 +42,56 @@ body {
   gap: 8px;
 }
 
+.button-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
 button {
-  border: 1px solid #3b4b5e;
-  background: #1a2531;
-  color: #d7dde5;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
+  display: flex;
+  width: 32px;
+  height: 32px;
+  padding: 8px;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  aspect-ratio: 1 / 1;
+  border-radius: 37px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #FFFFFF;
+  border: none;
+  transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44) 0.1s, box-shadow 0.25s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s ease-in-out, filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
+  box-shadow: 1px 1px 1px -1px #ffffff00 inset, -1px -1px 2px -1px #ffffff00 inset, 0 0 1px 0.25px rgba(255, 255, 255, 0) inset;
+  filter: drop-shadow(0 0 44px rgba(0, 0, 0, 0)) drop-shadow(0 0 4px rgba(0, 0, 0, 0)) drop-shadow(0 0 1px rgba(0, 0, 0, 0));
 }
 
 button:hover {
-  background: #243244;
+  scale: 1.1;
+  box-shadow: 1px 1px 1px -1px #FFF inset, -1px -1px 2px -1px #FFF inset, 0 0 1px 0.25px rgba(255, 255, 255, 0.10) inset;
+  filter: drop-shadow(0 0 44px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 4px rgba(0, 0, 0, 0.05)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.05));
+  transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44), box-shadow 0.25s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s ease-in-out, filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+button:active {
+  scale: 1.05;
+  opacity: 0.75;
+}
+
+button#logoutBtn {
+  color: #5297ff;
+  background: rgba(82, 151, 255, 0.10);
+}
+
+button#logoutBtn:hover {
+  box-shadow: 1px 1px 1px -1px #5297ff inset, -1px -1px 2px -1px #5297ff inset, 0 0 1px 0.25px rgba(82, 151, 255, 0.10) inset;
 }
 
 .terminal-container {
   position: relative;
   overflow: auto;
-  padding: 10px 12px;
+  padding: 16px 12px;
   outline: none;
 }
 
@@ -91,12 +122,15 @@ button:hover {
   0% {
     opacity: 1;
   }
+
   48% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.35;
   }
+
   100% {
     opacity: 0.35;
   }
@@ -108,9 +142,13 @@ button:hover {
   gap: 12px;
   padding: 8px 12px;
   font-size: 12px;
-  border-top: 1px solid #2a3848;
-  background: #121a22;
-  color: #95a6b8;
+  background: linear-gradient(to top, #0b0f14, transparent);
+  color: #FFFFFF;
+  height: fit-content;
+  width: 100vw;
+  position: fixed;
+  align-items: center;
+  bottom: 0;
 }
 
 .tip {
