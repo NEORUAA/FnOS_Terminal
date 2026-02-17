@@ -15,6 +15,7 @@ const clearBtn = document.getElementById("clearBtn");
 const ctrlCBtn = document.getElementById("ctrlCBtn");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const logoutBtn = document.getElementById("logoutBtn");
+const pasteBtn = document.getElementById("pasteBtn");
 
 const READ_TIMEOUT_SEC = 20;
 const MIN_PASSWORD_LEN = 8;
@@ -34,36 +35,52 @@ let cursorCol = 0;
 let renderScheduled = false;
 let terminalCols = 120;
 
+function on(el, eventName, handler) {
+  if (el) {
+    el.addEventListener(eventName, handler);
+  }
+}
+
+function focusEl(el) {
+  if (el && typeof el.focus === "function") {
+    el.focus();
+  }
+}
+
 function setStatus(text) {
-  statusTextEl.textContent = text;
+  if (statusTextEl) {
+    statusTextEl.textContent = text;
+  }
 }
 
 function setAuthError(text) {
-  authErrorEl.textContent = text || "";
+  if (authErrorEl) {
+    authErrorEl.textContent = text || "";
+  }
 }
 
 function showAuth(mode, hintText = "") {
-  authScreenEl.classList.remove("hidden");
-  terminalAppEl.classList.add("hidden");
-  setupFormEl.classList.toggle("hidden", mode !== "setup");
-  loginFormEl.classList.toggle("hidden", mode !== "login");
-  authHintEl.textContent = hintText;
+  if (authScreenEl) authScreenEl.classList.remove("hidden");
+  if (terminalAppEl) terminalAppEl.classList.add("hidden");
+  if (setupFormEl) setupFormEl.classList.toggle("hidden", mode !== "setup");
+  if (loginFormEl) loginFormEl.classList.toggle("hidden", mode !== "login");
+  if (authHintEl) authHintEl.textContent = hintText;
   setAuthError("");
 
   if (mode === "setup") {
-    setupPasswordEl.value = "";
-    setupPassword2El.value = "";
-    setupPasswordEl.focus();
+    if (setupPasswordEl) setupPasswordEl.value = "";
+    if (setupPassword2El) setupPassword2El.value = "";
+    focusEl(setupPasswordEl);
   } else {
-    loginPasswordEl.value = "";
-    loginPasswordEl.focus();
+    if (loginPasswordEl) loginPasswordEl.value = "";
+    focusEl(loginPasswordEl);
   }
 }
 
 function showTerminal() {
-  authScreenEl.classList.add("hidden");
-  terminalAppEl.classList.remove("hidden");
-  terminalContainer.focus();
+  if (authScreenEl) authScreenEl.classList.add("hidden");
+  if (terminalAppEl) terminalAppEl.classList.remove("hidden");
+  focusEl(terminalContainer);
 }
 
 async function requestJson(url, options = {}) {
@@ -548,12 +565,14 @@ function processCsi(paramsRaw, finalChar) {
 }
 
 function scheduleRender() {
+  if (!terminalEl) return;
   if (renderScheduled) return;
   renderScheduled = true;
   requestAnimationFrame(renderScreen);
 }
 
 function renderScreen() {
+  if (!terminalEl || !terminalContainer) return;
   renderScheduled = false;
 
   const fragment = document.createDocumentFragment();
@@ -739,6 +758,9 @@ function resetTerminalBuffer() {
 }
 
 function computeSize() {
+  if (!terminalContainer || !terminalEl) {
+    return { cols: 120, rows: 30 };
+  }
   const probe = document.createElement("span");
   probe.textContent = "MMMMMMMMMM";
   probe.style.position = "absolute";
@@ -925,7 +947,7 @@ async function connectTerminal(resetBuffer = false) {
     setStatus("正在创建 root bash 会话...");
     await createSession();
     await sendResize();
-    terminalContainer.focus();
+    focusEl(terminalContainer);
     pollOutput();
   } catch (error) {
     if (error.status === 401) {
@@ -957,8 +979,9 @@ async function loadAuthState() {
   await connectTerminal(false);
 }
 
-setupFormEl.addEventListener("submit", async (event) => {
+on(setupFormEl, "submit", async (event) => {
   event.preventDefault();
+  if (!setupPasswordEl || !setupPassword2El) return;
   const p1 = setupPasswordEl.value;
   const p2 = setupPassword2El.value;
 
@@ -985,8 +1008,9 @@ setupFormEl.addEventListener("submit", async (event) => {
   }
 });
 
-loginFormEl.addEventListener("submit", async (event) => {
+on(loginFormEl, "submit", async (event) => {
   event.preventDefault();
+  if (!loginPasswordEl) return;
   const password = loginPasswordEl.value;
   if (!password) {
     setAuthError("请输入访问密码");
@@ -1007,7 +1031,7 @@ loginFormEl.addEventListener("submit", async (event) => {
   }
 });
 
-logoutBtn.addEventListener("click", async () => {
+on(logoutBtn, "click", async () => {
   try {
     await requestJson("/api/auth/logout", { method: "POST" });
   } catch {
@@ -1017,18 +1041,28 @@ logoutBtn.addEventListener("click", async () => {
   showAuth("login", "已退出登录。请输入访问密码继续。");
 });
 
-terminalContainer.addEventListener("click", () => terminalContainer.focus());
-terminalContainer.addEventListener("keydown", (event) => {
+on(terminalContainer, "click", () => focusEl(terminalContainer));
+on(terminalContainer, "keydown", (event) => {
   const data = keyToInput(event);
   if (data === null) return;
   event.preventDefault();
   queueInput(data);
 });
 
-terminalContainer.addEventListener("paste", (event) => {
+on(terminalContainer, "paste", (event) => {
   event.preventDefault();
   const text = event.clipboardData.getData("text");
   queueInput(text);
+});
+
+on(pasteBtn, "click", async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) queueInput(text);
+    focusEl(terminalContainer);
+  } catch {
+    setStatus("浏览器未授权剪贴板读取");
+  }
 });
 
 window.addEventListener("resize", scheduleResize);
@@ -1036,20 +1070,20 @@ window.addEventListener("beforeunload", () => {
   closeSession();
 });
 
-clearBtn.addEventListener("click", () => {
+on(clearBtn, "click", () => {
   resetTerminalBuffer();
   if (sid) {
     queueInput("\x0c");
   }
-  terminalContainer.focus();
+  focusEl(terminalContainer);
 });
 
-ctrlCBtn.addEventListener("click", () => {
+on(ctrlCBtn, "click", () => {
   queueInput("\x03");
-  terminalContainer.focus();
+  focusEl(terminalContainer);
 });
 
-reconnectBtn.addEventListener("click", () => {
+on(reconnectBtn, "click", () => {
   resetTerminalBuffer();
   connectTerminal(false);
 });
