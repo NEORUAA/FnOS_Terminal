@@ -16,18 +16,23 @@ const ctrlCBtn = document.getElementById("ctrlCBtn");
 const reconnectBtn = document.getElementById("reconnectBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 
-const MAX_TERMINAL_CHARS = 300000;
 const READ_TIMEOUT_SEC = 20;
 const MIN_PASSWORD_LEN = 8;
+const MAX_SCREEN_ROWS = 2500;
 
 let sid = "";
 let running = false;
 let inputQueue = "";
 let flushTimer = null;
 let loopToken = 0;
-let renderedChars = 0;
+
 let ansiRemainder = "";
 let ansiState = createDefaultAnsiState();
+let screenLines = [[]];
+let cursorRow = 0;
+let cursorCol = 0;
+let renderScheduled = false;
+let terminalCols = 120;
 
 function setStatus(text) {
   statusTextEl.textContent = text;
@@ -129,6 +134,47 @@ function styleToCss(state) {
     css.push(`text-decoration-line:${lines.join(" ")}`);
   }
   return css.join(";");
+}
+
+function currentCellStyle() {
+  return styleToCss(ansiState);
+}
+
+function blankCell(style = "") {
+  return { ch: " ", style };
+}
+
+function charDisplayWidth(ch) {
+  if (!ch) return 1;
+  const cp = ch.codePointAt(0);
+  if (cp == null) return 1;
+
+  // Combining marks
+  if (
+    (cp >= 0x0300 && cp <= 0x036f) ||
+    (cp >= 0x1ab0 && cp <= 0x1aff) ||
+    (cp >= 0x1dc0 && cp <= 0x1dff) ||
+    (cp >= 0x20d0 && cp <= 0x20ff) ||
+    (cp >= 0xfe20 && cp <= 0xfe2f)
+  ) {
+    return 0;
+  }
+
+  // East Asian Wide / Fullwidth ranges
+  if (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe10 && cp <= 0xfe19) ||
+    (cp >= 0xfe30 && cp <= 0xfe6f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6)
+  ) {
+    return 2;
+  }
+
+  return 1;
 }
 
 function getAnsi16Color(code) {
@@ -282,39 +328,315 @@ function applySgr(state, sgr) {
   }
 }
 
-function parseAnsiToParts(input, state) {
-  const localState = cloneAnsiState(state);
-  const parts = [];
-  let i = 0;
-  let remainder = "";
+function ensureRow(row) {
+  while (screenLines.length <= row) {
+    screenLines.push([]);
+  }
+}
 
-  function appendChar(ch) {
-    const style = styleToCss(localState);
-    const last = parts.length ? parts[parts.length - 1] : null;
-    if (last && last.style === style) {
-      last.text += ch;
-    } else {
-      parts.push({ text: ch, style });
+function clampAndTrimRows() {
+  while (screenLines.length > MAX_SCREEN_ROWS) {
+    screenLines.shift();
+    cursorRow = Math.max(0, cursorRow - 1);
+  }
+}
+
+function ensureCol(line, col) {
+  while (line.length < col) {
+    line.push(blankCell());
+  }
+}
+
+function clearWideClusterAt(line, col) {
+  if (col < 0 || col >= line.length) return;
+  const cell = line[col];
+  if (!cell) return;
+
+  if (cell.cont) {
+    line[col] = blankCell();
+    if (col > 0 && line[col - 1] && line[col - 1].wide) {
+      line[col - 1] = blankCell();
+    }
+    return;
+  }
+
+  if (cell.wide) {
+    line[col] = blankCell();
+    if (col + 1 < line.length && line[col + 1] && line[col + 1].cont) {
+      line[col + 1] = blankCell();
+    }
+  }
+}
+
+function putChar(ch) {
+  let width = charDisplayWidth(ch);
+  if (width <= 0) width = 1;
+
+  if (terminalCols > 0 && cursorCol >= terminalCols) {
+    lineFeed();
+  }
+  if (terminalCols > 0 && width === 2 && cursorCol === terminalCols - 1) {
+    lineFeed();
+  }
+
+  ensureRow(cursorRow);
+  const line = screenLines[cursorRow];
+  ensureCol(line, cursorCol);
+  clearWideClusterAt(line, cursorCol);
+
+  if (width === 2) {
+    ensureCol(line, cursorCol + 1);
+    clearWideClusterAt(line, cursorCol + 1);
+    line[cursorCol] = { ch, style: currentCellStyle(), wide: true };
+    line[cursorCol + 1] = { ch: "", style: currentCellStyle(), cont: true };
+  } else {
+    line[cursorCol] = { ch, style: currentCellStyle() };
+  }
+
+  cursorCol += width;
+}
+
+function lineFeed() {
+  cursorRow += 1;
+  ensureRow(cursorRow);
+  cursorCol = 0;
+  clampAndTrimRows();
+}
+
+function carriageReturn() {
+  cursorCol = 0;
+}
+
+function backspace() {
+  if (cursorCol > 0) cursorCol -= 1;
+}
+
+function eraseInLine(mode) {
+  ensureRow(cursorRow);
+  const line = screenLines[cursorRow];
+
+  if (mode === 2) {
+    line.length = 0;
+    return;
+  }
+
+  if (mode === 1) {
+    const end = Math.min(cursorCol + 1, line.length);
+    for (let i = 0; i < end; i += 1) {
+      line[i] = blankCell();
+    }
+    return;
+  }
+
+  if (cursorCol < line.length) {
+    line.splice(cursorCol);
+  }
+}
+
+function eraseInDisplay(mode) {
+  ensureRow(cursorRow);
+
+  if (mode === 2) {
+    screenLines = [[]];
+    cursorRow = 0;
+    cursorCol = 0;
+    return;
+  }
+
+  if (mode === 1) {
+    for (let r = 0; r < cursorRow; r += 1) {
+      screenLines[r] = [];
+    }
+    const line = screenLines[cursorRow];
+    const end = Math.min(cursorCol + 1, line.length);
+    for (let i = 0; i < end; i += 1) {
+      line[i] = blankCell();
+    }
+    return;
+  }
+
+  eraseInLine(0);
+  if (cursorRow + 1 < screenLines.length) {
+    screenLines.splice(cursorRow + 1);
+  }
+}
+
+function csiValue(raw, fallback = 1) {
+  if (raw === "" || raw == null) return fallback;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
+}
+
+function processCsi(paramsRaw, finalChar) {
+  const params = paramsRaw === "" ? [] : paramsRaw.split(";");
+
+  if (finalChar === "m") {
+    applySgr(ansiState, paramsRaw);
+    return;
+  }
+
+  if (finalChar === "K") {
+    eraseInLine(csiValue(params[0], 0));
+    return;
+  }
+
+  if (finalChar === "J") {
+    eraseInDisplay(csiValue(params[0], 0));
+    return;
+  }
+
+  if (finalChar === "A") {
+    cursorRow = Math.max(0, cursorRow - csiValue(params[0], 1));
+    ensureRow(cursorRow);
+    return;
+  }
+
+  if (finalChar === "B") {
+    cursorRow += csiValue(params[0], 1);
+    ensureRow(cursorRow);
+    clampAndTrimRows();
+    return;
+  }
+
+  if (finalChar === "C") {
+    cursorCol += csiValue(params[0], 1);
+    if (terminalCols > 0) cursorCol = Math.min(cursorCol, terminalCols - 1);
+    return;
+  }
+
+  if (finalChar === "D") {
+    cursorCol = Math.max(0, cursorCol - csiValue(params[0], 1));
+    return;
+  }
+
+  if (finalChar === "G") {
+    cursorCol = Math.max(0, csiValue(params[0], 1) - 1);
+    if (terminalCols > 0) cursorCol = Math.min(cursorCol, terminalCols - 1);
+    return;
+  }
+
+  if (finalChar === "H" || finalChar === "f") {
+    const row = Math.max(1, csiValue(params[0], 1)) - 1;
+    const col = Math.max(1, csiValue(params[1], 1)) - 1;
+    cursorRow = row;
+    cursorCol = col;
+    if (terminalCols > 0) cursorCol = Math.min(cursorCol, terminalCols - 1);
+    ensureRow(cursorRow);
+    clampAndTrimRows();
+    return;
+  }
+
+  if (finalChar === "P") {
+    ensureRow(cursorRow);
+    const line = screenLines[cursorRow];
+    if (cursorCol < line.length) {
+      line.splice(cursorCol, csiValue(params[0], 1));
+    }
+    return;
+  }
+
+  if (finalChar === "@") {
+    ensureRow(cursorRow);
+    const line = screenLines[cursorRow];
+    const count = csiValue(params[0], 1);
+    ensureCol(line, cursorCol);
+    for (let i = 0; i < count; i += 1) {
+      line.splice(cursorCol, 0, blankCell());
+    }
+  }
+}
+
+function scheduleRender() {
+  if (renderScheduled) return;
+  renderScheduled = true;
+  requestAnimationFrame(renderScreen);
+}
+
+function renderScreen() {
+  renderScheduled = false;
+
+  const fragment = document.createDocumentFragment();
+  const rows = screenLines.length > 0 ? screenLines : [[]];
+
+  for (let r = 0; r < rows.length; r += 1) {
+    const line = rows[r];
+    let cursorAt = -1;
+    if (r === cursorRow) {
+      cursorAt = Math.max(0, cursorCol);
+      if (cursorAt < line.length && line[cursorAt] && line[cursorAt].cont) {
+        cursorAt = Math.max(0, cursorAt - 1);
+      }
+    }
+
+    let runStyle = null;
+    let runText = "";
+
+    const flushRun = () => {
+      if (!runText) return;
+      if (runStyle) {
+        const span = document.createElement("span");
+        span.style.cssText = runStyle;
+        span.textContent = runText;
+        fragment.appendChild(span);
+      } else {
+        fragment.appendChild(document.createTextNode(runText));
+      }
+      runText = "";
+    };
+
+    const maxCols = cursorAt >= 0 ? Math.max(line.length, cursorAt + 1) : line.length;
+    for (let c = 0; c < maxCols; c += 1) {
+      if (c === cursorAt) {
+        flushRun();
+        const cell = line[c] || blankCell();
+        const cursorSpan = document.createElement("span");
+        cursorSpan.className = "terminal-cursor";
+        if (cell.style) cursorSpan.style.cssText = cell.style;
+        cursorSpan.textContent = cell.cont ? " " : (cell.ch || " ");
+        fragment.appendChild(cursorSpan);
+        if (cell.wide) {
+          c += 1;
+        }
+        continue;
+      }
+
+      const cell = line[c] || { ch: " ", style: "" };
+      if (cell.cont) continue;
+      const style = cell.style || "";
+      if (style !== runStyle) {
+        flushRun();
+        runStyle = style;
+      }
+      runText += cell.ch || " ";
+    }
+
+    flushRun();
+    if (r < rows.length - 1) {
+      fragment.appendChild(document.createTextNode("\n"));
     }
   }
 
-  function eraseLastChar() {
-    if (!parts.length) return;
-    const last = parts[parts.length - 1];
-    last.text = last.text.slice(0, -1);
-    if (!last.text) parts.pop();
-  }
+  terminalEl.replaceChildren(fragment);
+  terminalContainer.scrollTop = terminalContainer.scrollHeight;
+}
 
+function processTerminalData(rawText) {
+  const input = ansiRemainder + rawText;
+  ansiRemainder = "";
+
+  let i = 0;
   while (i < input.length) {
     const ch = input[i];
 
     if (ch === "\x1b") {
       if (i + 1 >= input.length) {
-        remainder = input.slice(i);
+        ansiRemainder = input.slice(i);
         break;
       }
 
       const next = input[i + 1];
+
       if (next === "[") {
         let j = i + 2;
         while (j < input.length) {
@@ -322,15 +644,15 @@ function parseAnsiToParts(input, state) {
           if (code >= 0x40 && code <= 0x7e) break;
           j += 1;
         }
+
         if (j >= input.length) {
-          remainder = input.slice(i);
+          ansiRemainder = input.slice(i);
           break;
         }
-        const final = input[j];
-        const seq = input.slice(i + 2, j);
-        if (final === "m") {
-          applySgr(localState, seq);
-        }
+
+        const finalChar = input[j];
+        const params = input.slice(i + 2, j);
+        processCsi(params, finalChar);
         i = j + 1;
         continue;
       }
@@ -339,7 +661,7 @@ function parseAnsiToParts(input, state) {
         const bel = input.indexOf("\x07", i + 2);
         const st = input.indexOf("\x1b\\", i + 2);
         if (bel === -1 && st === -1) {
-          remainder = input.slice(i);
+          ansiRemainder = input.slice(i);
           break;
         }
         let endIdx = -1;
@@ -349,66 +671,71 @@ function parseAnsiToParts(input, state) {
         continue;
       }
 
+      if (next === "c") {
+        ansiState = createDefaultAnsiState();
+        screenLines = [[]];
+        cursorRow = 0;
+        cursorCol = 0;
+        i += 2;
+        continue;
+      }
+
       i += 2;
       continue;
     }
 
     if (ch === "\r") {
       if (i + 1 < input.length && input[i + 1] === "\n") {
-        appendChar("\n");
+        lineFeed();
         i += 2;
       } else {
+        carriageReturn();
         i += 1;
       }
       continue;
     }
 
-    if (ch === "\b") {
-      eraseLastChar();
+    if (ch === "\n") {
+      lineFeed();
       i += 1;
       continue;
     }
 
-    if (ch >= " " || ch === "\n" || ch === "\t") {
-      appendChar(ch);
+    if (ch === "\b") {
+      backspace();
+      i += 1;
+      continue;
     }
+
+    if (ch === "\t") {
+      let spaces = 8 - (cursorCol % 8);
+      if (spaces === 0) spaces = 8;
+      for (let s = 0; s < spaces; s += 1) {
+        putChar(" ");
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch >= " ") {
+      putChar(ch);
+    }
+
     i += 1;
   }
 
-  return {
-    parts,
-    remainder,
-    state: localState,
-  };
-}
-
-function appendOutput(rawText) {
-  const parsed = parseAnsiToParts(ansiRemainder + rawText, ansiState);
-  ansiRemainder = parsed.remainder;
-  ansiState = parsed.state;
-
-  if (!parsed.parts.length) return;
-  for (const part of parsed.parts) {
-    const span = document.createElement("span");
-    span.textContent = part.text;
-    if (part.style) span.style.cssText = part.style;
-    terminalEl.appendChild(span);
-    renderedChars += part.text.length;
-  }
-
-  if (renderedChars > MAX_TERMINAL_CHARS) {
-    terminalEl.textContent = "[Output truncated]\n";
-    renderedChars = terminalEl.textContent.length;
-  }
-
-  terminalContainer.scrollTop = terminalContainer.scrollHeight;
+  scheduleRender();
 }
 
 function resetTerminalBuffer() {
-  terminalEl.textContent = "";
-  renderedChars = 0;
   ansiRemainder = "";
   ansiState = createDefaultAnsiState();
+  screenLines = [[]];
+  cursorRow = 0;
+  cursorCol = 0;
+  const size = computeSize();
+  terminalCols = size.cols;
+  scheduleRender();
 }
 
 function computeSize() {
@@ -512,6 +839,7 @@ function keyToInput(event) {
 async function sendResize() {
   if (!sid) return;
   const { cols, rows } = computeSize();
+  terminalCols = cols;
   try {
     await requestJson("/api/resize", {
       method: "POST",
@@ -536,6 +864,7 @@ function scheduleResize() {
 
 async function createSession() {
   const { cols, rows } = computeSize();
+  terminalCols = cols;
   const payload = await requestJson("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -569,7 +898,7 @@ async function pollOutput() {
   while (running && sid && token === loopToken) {
     try {
       const payload = await requestJson(`/api/read?sid=${encodeURIComponent(sid)}&timeout=${READ_TIMEOUT_SEC}`);
-      if (payload.data) appendOutput(payload.data);
+      if (payload.data) processTerminalData(payload.data);
       if (payload.closed) {
         setStatus(`会话已关闭，退出码: ${payload.exitCode ?? "unknown"}`);
         running = false;
@@ -597,7 +926,6 @@ async function connectTerminal(resetBuffer = false) {
     await createSession();
     await sendResize();
     terminalContainer.focus();
-    appendOutput("Connected to root shell.\n");
     pollOutput();
   } catch (error) {
     if (error.status === 401) {
@@ -621,7 +949,7 @@ async function loadAuthState() {
   }
 
   if (!state.authenticated) {
-    showAuth("login", "请输入你之前设置的访问密码。\n");
+    showAuth("login", "请输入你之前设置的访问密码。");
     return;
   }
 
@@ -686,7 +1014,7 @@ logoutBtn.addEventListener("click", async () => {
     // Logout best-effort.
   }
   await closeSession();
-  showAuth("login", "已退出登录。请输入访问密码继续。\n");
+  showAuth("login", "已退出登录。请输入访问密码继续。");
 });
 
 terminalContainer.addEventListener("click", () => terminalContainer.focus());
@@ -710,6 +1038,9 @@ window.addEventListener("beforeunload", () => {
 
 clearBtn.addEventListener("click", () => {
   resetTerminalBuffer();
+  if (sid) {
+    queueInput("\x0c");
+  }
   terminalContainer.focus();
 });
 
