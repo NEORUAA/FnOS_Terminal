@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "FnOS_Terminal.Application": {
+            "title": "FnOS Terminal",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "port": "38473",
+            "url": "/",
+            "allUsers": false
+        }
+    }
+}

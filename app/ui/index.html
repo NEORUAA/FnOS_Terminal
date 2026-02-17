@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FnOS Terminal</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <h1>FnOS Terminal 登录</h1>
+      <p id="authHint" class="auth-hint"></p>
+
+      <form id="setupForm" class="auth-form">
+        <label for="setupPassword">首次设置访问密码</label>
+        <input id="setupPassword" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="setupPassword2">确认密码</label>
+        <input id="setupPassword2" type="password" autocomplete="new-password" minlength="8" required>
+        <button type="submit">保存并进入终端</button>
+      </form>
+
+      <form id="loginForm" class="auth-form hidden">
+        <label for="loginPassword">访问密码</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+        <button type="submit">登录终端</button>
+      </form>
+
+      <p id="authError" class="auth-error" role="alert"></p>
+    </div>
+  </div>
+
+  <div id="terminalApp" class="app hidden">
+    <header class="toolbar">
+      <div class="title">FnOS Terminal (root)</div>
+      <div class="actions">
+        <button id="ctrlCBtn" type="button">Ctrl+C</button>
+        <button id="clearBtn" type="button">清屏</button>
+        <button id="reconnectBtn" type="button">重连</button>
+        <button id="logoutBtn" type="button">退出登录</button>
+      </div>
+    </header>
+    <section id="terminalContainer" class="terminal-container" tabindex="0" aria-label="Terminal">
+      <pre id="terminal" class="terminal"></pre>
+    </section>
+    <footer class="statusbar">
+      <span id="statusText">正在初始化终端...</span>
+      <span class="tip">支持快捷键: Ctrl+C, Ctrl+L, 方向键, 粘贴</span>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

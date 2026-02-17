@@ -1,0 +1,13 @@
+appname               = FnOS_Terminal
+version               = 1.0.0
+display_name          = FnOS Terminal
+desc                  = Root bash terminal for fnOS
+arch                  = x86_64
+source                = thirdparty
+maintainer            = your-name
+distributor           = your-name
+desktop_uidir         = ui
+desktop_applaunchname = FnOS_Terminal.Application
+service_port          = 38473
+checkport             = true
+install_dep_apps      = python312

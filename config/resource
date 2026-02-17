@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "FnOS_Terminal",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "FnOS_Terminal"
+                    ]
+                }
+            },
+            {
+                "name": "FnOS_Terminal/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "FnOS_Terminal"
+                    ]
+                }
+            }
+        ]
+    }
+}
