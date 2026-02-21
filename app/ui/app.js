@@ -27,6 +27,7 @@ const MIN_PASSWORD_LEN = 8;
 const MAX_SCREEN_ROWS = 2500;
 const BODY_DIM_BACKGROUND = "rgba(0,0,0,0.7)";
 const DIM_DISABLED_STORAGE_KEY = "fnos_terminal_disable_dim";
+const AUTH_TOKEN_STORAGE_KEY = "fnos_terminal_auth_token";
 
 let sid = "";
 let running = false;
@@ -42,6 +43,7 @@ let cursorCol = 0;
 let renderScheduled = false;
 let terminalCols = 120;
 let windowAnimationApi = null;
+let authToken = loadAuthToken();
 
 function on(el, eventName, handler) {
   if (el) {
@@ -76,6 +78,27 @@ function applyDimState(disabled) {
   document.body.style.background = disabled ? "" : BODY_DIM_BACKGROUND;
   if (disableDimToggle) {
     disableDimToggle.checked = !!disabled;
+  }
+}
+
+function loadAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function setAuthToken(token) {
+  authToken = typeof token === "string" ? token : "";
+  try {
+    if (authToken) {
+      localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, authToken);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors.
   }
 }
 
@@ -235,10 +258,16 @@ function showTerminal() {
 }
 
 async function requestJson(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (authToken && !headers.has("X-Auth-Token")) {
+    headers.set("X-Auth-Token", authToken);
+  }
+
   const response = await fetch(url, {
     cache: "no-store",
     credentials: "same-origin",
     ...options,
+    headers,
   });
 
   let payload = {};
@@ -249,6 +278,9 @@ async function requestJson(url, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      setAuthToken("");
+    }
     const message = payload.error || `Request failed: ${response.status}`;
     const error = new Error(message);
     error.status = response.status;
@@ -1110,6 +1142,7 @@ async function connectTerminal(resetBuffer = false) {
 }
 
 async function handleUnauthorized() {
+  setAuthToken("");
   await closeSession();
   showAuth("login", "会话已失效，请重新输入访问密码。");
 }
@@ -1146,11 +1179,12 @@ on(setupFormEl, "submit", async (event) => {
   }
 
   try {
-    await requestJson("/api/auth/setup", {
+    const payload = await requestJson("/api/auth/setup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password: p1 }),
     });
+    setAuthToken(payload.authToken || "");
     showTerminal();
     resetTerminalBuffer();
     await connectTerminal(false);
@@ -1169,11 +1203,12 @@ on(loginFormEl, "submit", async (event) => {
   }
 
   try {
-    await requestJson("/api/auth/login", {
+    const payload = await requestJson("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     });
+    setAuthToken(payload.authToken || "");
     showTerminal();
     resetTerminalBuffer();
     await connectTerminal(false);
@@ -1188,6 +1223,7 @@ on(logoutBtn, "click", async () => {
   } catch {
     // Logout best-effort.
   }
+  setAuthToken("");
   await closeSession();
   showAuth("login", "已退出登录。请输入访问密码继续。");
 });

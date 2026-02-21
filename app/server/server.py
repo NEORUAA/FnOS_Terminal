@@ -46,7 +46,6 @@ CONTENT_TYPES = {
     ".txt": "text/plain; charset=utf-8",
 }
 
-
 class AuthManager:
     def __init__(self, auth_file: Path):
         self._auth_file = auth_file
@@ -182,8 +181,39 @@ class TerminalSession:
         env.setdefault("LANG", "C.UTF-8")
         cwd = env.get("TRIM_PKGHOME", "/")
 
+        # Use a single shared history file with SSH so records interleave
+        # naturally by execution order in both SSH and app terminals.
+        ssh_hist_file = Path(env.get("HOME", "/root")) / ".bash_history"
+        hist_file = ssh_hist_file
+        try:
+            ssh_hist_file.parent.mkdir(parents=True, exist_ok=True)
+            if not ssh_hist_file.exists():
+                ssh_hist_file.touch(mode=0o600, exist_ok=True)
+            else:
+                os.chmod(ssh_hist_file, 0o600)
+        except Exception:
+            hist_file = Path(cwd) / ".bash_history"
+            hist_file.parent.mkdir(parents=True, exist_ok=True)
+            if not hist_file.exists():
+                hist_file.touch(mode=0o600, exist_ok=True)
+            else:
+                os.chmod(hist_file, 0o600)
+
+        env["HISTFILE"] = str(hist_file)
+        env.setdefault("HISTSIZE", "5000")
+        env.setdefault("HISTFILESIZE", "20000")
+        env.setdefault("HISTCONTROL", "ignoredups:erasedups")
+        history_sync_cmd = "history -a; history -n"
+        current_prompt_command = (env.get("PROMPT_COMMAND") or "").strip()
+        if current_prompt_command:
+            if history_sync_cmd not in current_prompt_command:
+                env["PROMPT_COMMAND"] = f"{history_sync_cmd}; {current_prompt_command}"
+        else:
+            env["PROMPT_COMMAND"] = history_sync_cmd
+
+        shell_args = [shell, "-i"]
         self._process = subprocess.Popen(
-            [shell, "-i"],
+            shell_args,
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -365,11 +395,27 @@ class TerminalHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self._send_response(status, body, headers=headers)
 
+    def _get_content_length(self) -> int:
+        try:
+            return int(self.headers.get("Content-Length", "0") or "0")
+        except (TypeError, ValueError):
+            return 0
+
     def _read_body(self):
-        content_length = int(self.headers.get("Content-Length", "0") or "0")
+        content_length = self._get_content_length()
         if content_length <= 0:
             return b""
         return self.rfile.read(content_length)
+
+    def _drain_request_body(self):
+        content_length = self._get_content_length()
+        if content_length <= 0:
+            return
+        try:
+            self.rfile.read(content_length)
+        except Exception:
+            # Best-effort body drain to keep HTTP/1.1 connection parsable.
+            pass
 
     def _parse_json_body(self):
         body = self._read_body()
@@ -394,23 +440,47 @@ class TerminalHandler(BaseHTTPRequestHandler):
             return None
         return morsel.value
 
+    def _get_header_auth_token(self) -> Optional[str]:
+        token = self.headers.get("X-Auth-Token")
+        if not token:
+            return None
+        token = token.strip()
+        if not token or len(token) > 512:
+            return None
+        return token
+
     def _build_auth_cookie(self, token: str) -> str:
         return f"{AUTH_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={AUTH_SESSION_IDLE_TIMEOUT_SEC}"
 
     def _build_clear_auth_cookie(self) -> str:
         return f"{AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
 
-    def _is_authenticated(self) -> tuple[bool, Optional[str]]:
-        token = self._get_cookie_value(AUTH_COOKIE_NAME)
-        return self.auth.validate_auth_session(token), token
+    def _is_authenticated(self) -> tuple[bool, Optional[str], Optional[str]]:
+        header_token = self._get_header_auth_token()
+        if self.auth.validate_auth_session(header_token):
+            return True, header_token, "header"
+
+        cookie_token = self._get_cookie_value(AUTH_COOKIE_NAME)
+        if self.auth.validate_auth_session(cookie_token):
+            return True, cookie_token, "cookie"
+
+        if cookie_token:
+            return False, cookie_token, "cookie"
+        if header_token:
+            return False, header_token, "header"
+        return False, None, None
 
     def _require_auth(self) -> bool:
-        ok, token = self._is_authenticated()
+        ok, token, source = self._is_authenticated()
         if ok:
             return True
 
+        # Drain unread POST body before responding 401, otherwise keep-alive
+        # may treat payload bytes as the next request line (causing 501).
+        self._drain_request_body()
+
         headers = None
-        if token:
+        if source == "cookie" and token:
             headers = [("Set-Cookie", self._build_clear_auth_cookie())]
         self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"}, headers=headers)
         return False
@@ -476,7 +546,7 @@ class TerminalHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
     def _handle_auth_state(self):
-        authenticated, _ = self._is_authenticated()
+        authenticated, _, _ = self._is_authenticated()
         self._send_json(
             HTTPStatus.OK,
             {
@@ -513,7 +583,7 @@ class TerminalHandler(BaseHTTPRequestHandler):
         token = self.auth.create_auth_session()
         self._send_json(
             HTTPStatus.OK,
-            {"ok": True, "configured": True, "authenticated": True},
+            {"ok": True, "configured": True, "authenticated": True, "authToken": token},
             headers=[("Set-Cookie", self._build_auth_cookie(token))],
         )
 
@@ -535,13 +605,16 @@ class TerminalHandler(BaseHTTPRequestHandler):
         token = self.auth.create_auth_session()
         self._send_json(
             HTTPStatus.OK,
-            {"ok": True, "authenticated": True},
+            {"ok": True, "authenticated": True, "authToken": token},
             headers=[("Set-Cookie", self._build_auth_cookie(token))],
         )
 
     def _handle_auth_logout(self):
-        token = self._get_cookie_value(AUTH_COOKIE_NAME)
-        self.auth.destroy_auth_session(token)
+        cookie_token = self._get_cookie_value(AUTH_COOKIE_NAME)
+        header_token = self._get_header_auth_token()
+        self.auth.destroy_auth_session(cookie_token)
+        if header_token and header_token != cookie_token:
+            self.auth.destroy_auth_session(header_token)
         self._send_json(HTTPStatus.OK, {"ok": True}, headers=[("Set-Cookie", self._build_clear_auth_cookie())])
 
     def _get_session(self, sid):
