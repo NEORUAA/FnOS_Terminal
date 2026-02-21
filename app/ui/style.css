@@ -302,6 +302,7 @@ button#logoutBtn:hover {
 
 #settingsCard {
   border-radius: 25px;
+  background: rgba(0, 0, 0, .6);
 }
 
 .switch {

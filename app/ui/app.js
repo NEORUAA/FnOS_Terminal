@@ -81,6 +81,59 @@ function applyDimState(disabled) {
   }
 }
 
+async function readClipboardTextWithPermission() {
+  if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
+    const error = new Error("clipboard-api-unavailable");
+    error.code = "clipboard-api-unavailable";
+    throw error;
+  }
+
+  if (navigator.permissions && typeof navigator.permissions.query === "function") {
+    try {
+      const permission = await navigator.permissions.query({ name: "clipboard-read" });
+      if (permission.state === "denied") {
+        const deniedError = new Error("clipboard-denied");
+        deniedError.code = "clipboard-denied";
+        throw deniedError;
+      }
+    } catch (error) {
+      if (error?.code === "clipboard-denied") {
+        throw error;
+      }
+      // Some browsers do not support querying clipboard-read.
+    }
+  }
+
+  try {
+    return await navigator.clipboard.readText();
+  } catch (error) {
+    if (!window.isSecureContext) {
+      const insecureError = new Error("clipboard-insecure-context");
+      insecureError.code = "clipboard-insecure-context";
+      throw insecureError;
+    }
+    if (error?.name === "NotAllowedError" || error?.name === "SecurityError") {
+      const deniedError = new Error("clipboard-denied");
+      deniedError.code = "clipboard-denied";
+      throw deniedError;
+    }
+    throw error;
+  }
+}
+
+function showClipboardPermissionHint(error) {
+  const code = error?.code || "";
+  if (code === "clipboard-denied") {
+    setStatus("请在浏览器站点权限中允许“剪贴板读取”后重试。");
+    return;
+  }
+  if (code === "clipboard-insecure-context") {
+    setStatus("当前页面不支持系统剪贴板读取。请在终端区域直接按 Ctrl/Cmd+V 粘贴。");
+    return;
+  }
+  setStatus("剪贴板读取失败，请在终端区域直接粘贴（Ctrl/Cmd+V）。");
+}
+
 function loadAuthToken() {
   try {
     return localStorage.getItem(AUTH_TOKEN_STORAGE_KEY) || "";
@@ -1264,11 +1317,24 @@ on(terminalContainer, "paste", (event) => {
 
 on(pasteBtn, "click", async () => {
   try {
-    const text = await navigator.clipboard.readText();
-    if (text) queueInput(text);
+    const text = await readClipboardTextWithPermission();
+    if (text) {
+      queueInput(text);
+    } else {
+      setStatus("剪贴板为空");
+    }
     focusEl(terminalContainer);
-  } catch {
-    setStatus("浏览器未授权剪贴板读取");
+  } catch (error) {
+    if (error?.code === "clipboard-insecure-context") {
+      const manualText = window.prompt("当前页面无法直接读取系统剪贴板，请手动粘贴文本：", "");
+      if (manualText) {
+        queueInput(manualText);
+        setStatus("已粘贴手动输入内容");
+        focusEl(terminalContainer);
+        return;
+      }
+    }
+    showClipboardPermissionHint(error);
   }
 });
 
