@@ -13,8 +13,26 @@ body {
   /* background: #0b0f14;
   background-image: url("https://images.unsplash.com/photo-1770064319334-2c61b12dd2cc?q=80&w=1470&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"); */
   background-size: cover;
-  color: #d7dde5;
+  color: white;
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+@supports (corner-shape: squircle) {
+  html {
+    #settingsCard {
+      border-radius: 50px;
+    }
+
+    .auth-card {
+      border-radius: 36px;
+      corner-shape: superellipse(2);
+    }
+
+    .auth-form input {
+      border-radius: 16px;
+      corner-shape: superellipse(2);
+    }
+  }
 }
 
 .app {
@@ -185,14 +203,16 @@ button#logoutBtn:hover {
 }
 
 .auth-card {
+  --card-bg: rgba(255, 255, 255, 0.10);
+  --switch-off: #858585;
+  --switch-on: rgb(0, 102, 255);
   width: min(460px, 100%);
-  border-radius: 36px;
+  border-radius: 18px;
   padding: 18px;
   box-shadow: 1px 1px 1px -1px #FFF inset, -1px -1px 2px -1px #FFF inset, 0 0 1px 0.25px rgba(255, 255, 255, 0.10) inset;
   filter: drop-shadow(0 0 44px rgba(0, 0, 0, 0.10)) drop-shadow(0 0 4px rgba(0, 0, 0, 0.05)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.05));
   transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44), box-shadow 0.25s cubic-bezier(0.4, 0.0, 0.2, 1), background-color 0.2s ease-in-out, filter 0.2s ease-in-out, opacity 0.2s ease-in-out;
   background: rgba(255, 255, 255, 0.10);
-  corner-shape: superellipse(2);
 }
 
 .fnos-window--enter {
@@ -257,11 +277,10 @@ button#logoutBtn:hover {
   border: none;
   background: rgba(255, 255, 255, .2);
   color: white;
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 9px 10px;
   font: inherit;
   outline: none;
-  corner-shape: superellipse(2);
 }
 
 .auth-form input:focus {
@@ -279,4 +298,89 @@ button#logoutBtn:hover {
   margin: 12px 0 0;
   color: #ef7d86;
   font-size: 12px;
+}
+
+#settingsCard {
+  border-radius: 25px;
+}
+
+.switch {
+  box-sizing: border-box;
+  display: inline-flex;
+  border-radius: 13px;
+  border: 1px transparent solid;
+  position: relative;
+  cursor: pointer;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--switch-off);
+  transition: 0.2s ease;
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 18px;
+  left: 2px;
+  top: 2px;
+  border-radius: 999px;
+  background: #ffffff;
+  transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44) 0.1s, left 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease-in-out, outline-color 0.2s ease-in-out;
+  box-shadow: 1px 1px 1px -1px #fff inset, -1px -1px 2px -1px #fff inset, 0 0 1px 0.25px rgba(255, 255, 255, 0.1) inset;
+  filter: drop-shadow(0 0 44px rgba(0, 0, 0, 0.1)) drop-shadow(0 0 4px rgba(0, 0, 0, 0.05)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.05));
+  z-index: 10;
+  transform-origin: center;
+  backdrop-filter: blur(1px) saturate(100%);
+  outline: 0.75px solid;
+  outline-color: transparent;
+}
+
+.slider:active::before {
+  background: rgba(255, 255, 255, 0.3);
+  scale: 1.4;
+  transition: scale 0.4s cubic-bezier(0, 1.16, 0.29, 1.44), left 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease-in-out, outline-color 0.2s ease-in-out;
+  outline-color: color-mix(in srgb, var(--switch-off) 35%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .slider:active::before {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.switch input:checked + .slider {
+  background: var(--switch-on);
+}
+
+.switch input:checked + .slider::before {
+  left: 18px;
+}
+
+.switch input:checked + .slider:active::before {
+  outline-color: color-mix(in srgb, var(--switch-on) 35%, transparent);
+}
+
+.switch input:disabled + .slider {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
