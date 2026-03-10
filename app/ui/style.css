@@ -110,54 +110,30 @@ button#logoutBtn:hover {
 
 .terminal-container {
   position: relative;
-  overflow: auto;
-  padding: 16px 16px 48px;
+  overflow: hidden;
+  padding: 8px 8px 40px;
   outline: none;
   height: 100vh;
+  box-sizing: border-box;
   scrollbar-color: rgba(255, 255, 255, .1) transparent;
 }
 
-.terminal-container:focus {
-  .terminal-cursor {
-    display: inline-block;
-  }
+.terminal {
+  width: 100%;
+  height: 100%;
 }
 
-.terminal {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  line-height: 1.25;
+.terminal .xterm-viewport,
+.terminal .xterm-screen {
+  background: transparent !important;
+}
+
+.terminal .xterm {
+  color: #d7dde5;
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
   font-size: 14px;
-  min-height: 100%;
   --terminal-fg: #d7dde5;
   --terminal-bg: #0b0f14;
-}
-
-.terminal-cursor {
-  display: none;
-  min-width: 0.65ch;
-  background: #d7dde5;
-  color: #0b0f14;
-  animation: cursor-blink 1.05s step-end infinite;
-}
-
-@keyframes cursor-blink {
-  0% {
-    opacity: 1;
-  }
-
-  48% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.35;
-  }
-
-  100% {
-    opacity: 0.35;
-  }
 }
 
 .statusbar {

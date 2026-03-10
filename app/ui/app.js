@@ -44,6 +44,8 @@ let renderScheduled = false;
 let terminalCols = 120;
 let windowAnimationApi = null;
 let authToken = loadAuthToken();
+let term = null;
+let fitAddon = null;
 
 function on(el, eventName, handler) {
   if (el) {
@@ -79,6 +81,32 @@ function applyDimState(disabled) {
   if (disableDimToggle) {
     disableDimToggle.checked = !!disabled;
   }
+}
+
+function ensureTerminal() {
+  if (term || !terminalEl || !window.Terminal) return;
+  term = new window.Terminal({
+    cursorBlink: true,
+    convertEol: true,
+    fontFamily: '"SF Mono", "Menlo", "Consolas", monospace',
+    fontSize: 14,
+    theme: {
+      background: "transparent",
+      foreground: "#d7dde5",
+      cursor: "#d7dde5",
+      selection: "rgba(255,255,255,0.2)",
+    },
+  });
+  if (window.FitAddon?.FitAddon) {
+    fitAddon = new window.FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+  }
+  term.open(terminalEl);
+  fitAddon?.fit();
+  term.onData((data) => {
+    queueInput(data);
+  });
+  term.focus();
 }
 
 async function readClipboardTextWithPermission() {
@@ -305,9 +333,14 @@ function showAuth(mode, hintText = "") {
 
 function showTerminal() {
   hideSettingsImmediately();
+  ensureTerminal();
   if (authScreenEl) authScreenEl.classList.add("hidden");
   if (terminalAppEl) terminalAppEl.classList.remove("hidden");
-  focusEl(terminalContainer);
+  if (term) {
+    term.focus();
+  } else {
+    focusEl(terminalContainer);
+  }
 }
 
 async function requestJson(url, options = {}) {
@@ -877,6 +910,10 @@ function renderScreen() {
 }
 
 function processTerminalData(rawText) {
+  if (term) {
+    term.write(rawText);
+    return;
+  }
   const input = ansiRemainder + rawText;
   ansiRemainder = "";
 
@@ -983,6 +1020,14 @@ function processTerminalData(rawText) {
 }
 
 function resetTerminalBuffer() {
+  if (term) {
+    term.reset();
+    term.clear();
+    fitAddon?.fit();
+    const size = computeSize();
+    terminalCols = size.cols;
+    return;
+  }
   ansiRemainder = "";
   ansiState = createDefaultAnsiState();
   screenLines = [[]];
@@ -994,6 +1039,9 @@ function resetTerminalBuffer() {
 }
 
 function computeSize() {
+  if (term && term.cols && term.rows) {
+    return { cols: term.cols, rows: term.rows };
+  }
   if (!terminalContainer || !terminalEl) {
     return { cols: 120, rows: 30 };
   }
@@ -1096,6 +1144,9 @@ function keyToInput(event) {
 
 async function sendResize() {
   if (!sid) return;
+  if (fitAddon && term) {
+    fitAddon.fit();
+  }
   const { cols, rows } = computeSize();
   terminalCols = cols;
   try {
@@ -1181,9 +1232,14 @@ async function connectTerminal(resetBuffer = false) {
 
   try {
     setStatus("正在创建 root bash 会话...");
+    ensureTerminal();
     await createSession();
     await sendResize();
-    focusEl(terminalContainer);
+    if (term) {
+      term.focus();
+    } else {
+      focusEl(terminalContainer);
+    }
     pollOutput();
   } catch (error) {
     if (error.status === 401) {
@@ -1301,18 +1357,12 @@ on(disableDimToggle, "change", () => {
   applyDimState(disabled);
 });
 
-on(terminalContainer, "click", () => focusEl(terminalContainer));
-on(terminalContainer, "keydown", (event) => {
-  const data = keyToInput(event);
-  if (data === null) return;
-  event.preventDefault();
-  queueInput(data);
-});
-
-on(terminalContainer, "paste", (event) => {
-  event.preventDefault();
-  const text = event.clipboardData.getData("text");
-  queueInput(text);
+on(terminalContainer, "click", () => {
+  if (term) {
+    term.focus();
+  } else {
+    focusEl(terminalContainer);
+  }
 });
 
 on(pasteBtn, "click", async () => {

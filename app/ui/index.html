@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FnOS Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 
@@ -19,7 +20,7 @@
         <input id="setupPassword" type="password" autocomplete="new-password" minlength="8" required>
         <label for="setupPassword2">确认密码</label>
         <input id="setupPassword2" type="password" autocomplete="new-password" minlength="8" required>
-        <button type="submit">保存并进入终端</button>
+        <button type="submit">保存并进入</button>
       </form>
 
       <form id="loginForm" class="auth-form hidden">
@@ -33,8 +34,8 @@
   </div>
 
   <div id="terminalApp" class="app hidden">
-    <section id="terminalContainer" class="terminal-container" tabindex="0" aria-label="Terminal">
-      <pre id="terminal" class="terminal"></pre>
+    <section id="terminalContainer" class="terminal-container" aria-label="Terminal">
+      <div id="terminal" class="terminal"></div>
     </section>
     <div id="settingsOverlay" class="hidden"
       style="position:fixed;inset:0;z-index:1200;display:flex;justify-content:center;align-items:flex-end;padding:28px 14px;">
@@ -116,6 +117,8 @@
       </div>
     </footer>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script src="/app.js"></script>
 </body>
 
